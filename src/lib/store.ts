@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { MenuItem, Order, User, Rider } from './mockData';
+import { MenuItem, Order, User, Rider, Deal } from './mockData';
 
 interface CartItem {
   menuItem: MenuItem;
@@ -29,6 +29,18 @@ interface AppState {
   riders: Rider[];
   updateRiderStatus: (riderId: string, status: Rider['status']) => void;
   assignOrderToRider: (orderId: string, riderId: string) => void;
+  
+  // Admin - Deals management
+  deals: Deal[];
+  addDeal: (deal: Deal) => void;
+  updateDeal: (dealId: string, updates: Partial<Deal>) => void;
+  deleteDeal: (dealId: string) => void;
+  
+  // Admin - Menu management
+  menuItems: MenuItem[];
+  addMenuItem: (item: MenuItem) => void;
+  updateMenuItem: (itemId: string, updates: Partial<MenuItem>) => void;
+  deleteMenuItem: (itemId: string) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -37,6 +49,8 @@ export const useStore = create<AppState>((set) => ({
   cart: [],
   orders: [],
   riders: [],
+  deals: [],
+  menuItems: [],
   
   setCurrentUser: (user) => set({ currentUser: user }),
   
@@ -93,5 +107,33 @@ export const useStore = create<AppState>((set) => ({
         ? { ...rider, currentOrders: [...rider.currentOrders, orderId] }
         : rider
     ),
+  })),
+  
+  addDeal: (deal) => set((state) => ({
+    deals: [...state.deals, deal],
+  })),
+  
+  updateDeal: (dealId, updates) => set((state) => ({
+    deals: state.deals.map((deal) =>
+      deal.id === dealId ? { ...deal, ...updates } : deal
+    ),
+  })),
+  
+  deleteDeal: (dealId) => set((state) => ({
+    deals: state.deals.filter((deal) => deal.id !== dealId),
+  })),
+  
+  addMenuItem: (item) => set((state) => ({
+    menuItems: [...state.menuItems, item],
+  })),
+  
+  updateMenuItem: (itemId, updates) => set((state) => ({
+    menuItems: state.menuItems.map((item) =>
+      item.id === itemId ? { ...item, ...updates } : item
+    ),
+  })),
+  
+  deleteMenuItem: (itemId) => set((state) => ({
+    menuItems: state.menuItems.filter((item) => item.id !== itemId),
   })),
 }));

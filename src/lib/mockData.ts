@@ -44,6 +44,17 @@ export interface Rider {
   earnings: number;
 }
 
+export interface Deal {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  discount: number;
+  image: string;
+  validUntil: string;
+  isActive: boolean;
+}
+
 export const mockMenuItems: MenuItem[] = [
   // Breakfast
   {
@@ -265,4 +276,27 @@ export const serviceAreas = [
   "Karachi - DHA",
   "Islamabad - F-7",
   "Islamabad - G-10",
+];
+
+export const mockDeals: Deal[] = [
+  {
+    id: "deal-1",
+    name: "Family Feast",
+    description: "2 Biryanis + 1 Karahi + 2 Drinks + 1 Dessert",
+    price: 1500,
+    discount: 20,
+    image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500",
+    validUntil: "2025-11-30",
+    isActive: true,
+  },
+  {
+    id: "deal-2",
+    name: "Breakfast Special",
+    description: "Halwa Puri + Chai for 2 persons",
+    price: 400,
+    discount: 15,
+    image: "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=500",
+    validUntil: "2025-11-15",
+    isActive: true,
+  },
 ];
