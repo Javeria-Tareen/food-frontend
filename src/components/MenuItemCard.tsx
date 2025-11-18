@@ -1,9 +1,9 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Plus, Flame, Leaf } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MenuItem } from "@/lib/mockData";
-import { useStore } from "@/lib/store";
-import { toast } from "sonner";
+import { ProductModal } from "./ProductModal";
 
 interface MenuItemCardProps {
   item: MenuItem;
@@ -11,15 +11,21 @@ interface MenuItemCardProps {
 }
 
 export const MenuItemCard = ({ item, index = 0 }: MenuItemCardProps) => {
-  const addToCart = useStore((state) => state.addToCart);
+  const [showModal, setShowModal] = useState(false);
 
   const handleAddToCart = () => {
-    addToCart(item);
-    toast.success(`${item.name} added to cart!`);
+    setShowModal(true);
   };
 
   return (
-    <motion.div
+    <>
+      <ProductModal 
+        item={item} 
+        isOpen={showModal} 
+        onClose={() => setShowModal(false)} 
+      />
+      
+      <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
@@ -70,5 +76,6 @@ export const MenuItemCard = ({ item, index = 0 }: MenuItemCardProps) => {
         </Button>
       </div>
     </motion.div>
+    </>
   );
 };
