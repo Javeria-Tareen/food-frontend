@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ChefHat, Clock, MapPin, Star, ArrowRight } from "lucide-react";
@@ -9,6 +10,22 @@ import { Footer } from "@/components/Footer";
 
 export const Home = () => {
   const featuredItems = mockMenuItems.filter((item) => item.featured);
+  
+  const promotionalTexts = [
+    { main: "CASHBACK", sub: "up to 30% cashback on all orders" },
+    { main: "FREE DELIVERY", sub: "Free delivery on orders above Rs. 500" },
+    { main: "SPECIAL DISCOUNT", sub: "Get 20% off on your first order" },
+  ];
+  
+  const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentPromoIndex((prev) => (prev + 1) % promotionalTexts.length);
+    }, 120000); // 120 seconds = 2 minutes
+
+    return () => clearInterval(interval);
+  }, []);
   const categories = [
     { name: "Breakfast", icon: "🍳", link: "/menu?category=breakfast" },
     { name: "Lunch", icon: "🍛", link: "/menu?category=lunch" },
@@ -105,11 +122,26 @@ export const Home = () => {
           >
             <h1 className="text-6xl md:text-8xl font-bold mb-6 leading-tight">
               <span className="text-foreground">SUPER</span>
-              <span className="text-primary block animate-pulse">CASHBACK</span>
+              <motion.span 
+                key={currentPromoIndex}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.5 }}
+                className="text-primary block animate-pulse"
+              >
+                {promotionalTexts[currentPromoIndex].main}
+              </motion.span>
             </h1>
-            <p className="text-xl text-muted-foreground mb-12">
-              up to 30% cashback on all orders
-            </p>
+            <motion.p 
+              key={`sub-${currentPromoIndex}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="text-xl text-muted-foreground mb-12"
+            >
+              {promotionalTexts[currentPromoIndex].sub}
+            </motion.p>
             
             <div className="flex flex-col gap-6 items-center mb-12">
               <div className="flex gap-4 w-full max-w-2xl">

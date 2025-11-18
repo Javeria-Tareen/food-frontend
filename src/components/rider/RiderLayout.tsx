@@ -28,6 +28,14 @@ const RiderLayout = () => {
           <h1 className="text-xl font-bold text-primary">Rider Portal</h1>
         </div>
         <nav className="space-y-2 p-4">
+          <Button 
+            variant="outline" 
+            className="w-full justify-start border-primary/30 hover:bg-primary/10 hover:border-primary mb-2" 
+            onClick={handleLogout}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -44,16 +52,6 @@ const RiderLayout = () => {
             );
           })}
         </nav>
-        <div className="absolute bottom-4 left-4 right-4">
-          <Button 
-            variant="outline" 
-            className="w-full border-primary/30 hover:bg-primary/10 hover:border-primary" 
-            onClick={handleLogout}
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
-        </div>
       </aside>
 
       {/* Main Content */}

@@ -11,7 +11,10 @@ export const Cart = () => {
   const navigate = useNavigate();
   const { cart, updateCartQuantity, removeFromCart, clearCart } = useStore();
 
-  const subtotal = cart.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => {
+    const addOnsTotal = (item.addOns || []).reduce((addOnSum, addOn) => addOnSum + addOn.price, 0);
+    return sum + (item.menuItem.price + addOnsTotal) * item.quantity;
+  }, 0);
   const deliveryFee = cart.length > 0 ? 100 : 0;
   const total = subtotal + deliveryFee;
 
@@ -92,6 +95,11 @@ export const Cart = () => {
                         <p className="text-sm text-muted-foreground line-clamp-1">
                           {item.menuItem.description}
                         </p>
+                        {item.addOns && item.addOns.length > 0 && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            <span className="font-medium">Add-ons:</span> {item.addOns.map(a => a.name).join(", ")}
+                          </div>
+                        )}
                       </div>
                       <Button
                         variant="ghost"
@@ -125,7 +133,9 @@ export const Cart = () => {
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
-                      <p className="font-bold text-lg">Rs. {item.menuItem.price * item.quantity}</p>
+                      <p className="font-bold text-lg">
+                        Rs. {((item.menuItem.price + (item.addOns || []).reduce((sum, a) => sum + a.price, 0)) * item.quantity)}
+                      </p>
                     </div>
                   </div>
                 </div>

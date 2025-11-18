@@ -1,9 +1,16 @@
 import { create } from 'zustand';
 import { MenuItem, Order, User, Rider, Deal } from './mockData';
 
-interface CartItem {
+export interface AddOn {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface CartItem {
   menuItem: MenuItem;
   quantity: number;
+  addOns?: AddOn[];
 }
 
 interface AppState {
@@ -15,8 +22,8 @@ interface AppState {
   // Actions
   setCurrentUser: (user: User | null) => void;
   setSelectedArea: (area: string) => void;
-  addToCart: (item: MenuItem) => void;
-  removeFromCart: (itemId: string) => void;
+  addToCart: (item: MenuItem, addOns?: AddOn[]) => void;
+  removeFromCart: (itemId: string, addOns?: AddOn[]) => void;
   updateCartQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
   
@@ -56,18 +63,25 @@ export const useStore = create<AppState>((set) => ({
   
   setSelectedArea: (area) => set({ selectedArea: area }),
   
-  addToCart: (item) => set((state) => {
-    const existingItem = state.cart.find((cartItem) => cartItem.menuItem.id === item.id);
+  addToCart: (item, addOns = []) => set((state) => {
+    const addOnsKey = JSON.stringify(addOns.map(a => a.id).sort());
+    const existingItem = state.cart.find(
+      (cartItem) => 
+        cartItem.menuItem.id === item.id && 
+        JSON.stringify((cartItem.addOns || []).map(a => a.id).sort()) === addOnsKey
+    );
+    
     if (existingItem) {
       return {
         cart: state.cart.map((cartItem) =>
-          cartItem.menuItem.id === item.id
+          cartItem.menuItem.id === item.id && 
+          JSON.stringify((cartItem.addOns || []).map(a => a.id).sort()) === addOnsKey
             ? { ...cartItem, quantity: cartItem.quantity + 1 }
             : cartItem
         ),
       };
     }
-    return { cart: [...state.cart, { menuItem: item, quantity: 1 }] };
+    return { cart: [...state.cart, { menuItem: item, quantity: 1, addOns }] };
   }),
   
   removeFromCart: (itemId) => set((state) => ({
