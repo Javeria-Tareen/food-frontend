@@ -52,7 +52,7 @@ export const useAreaStore = create<AreaStore>()(
         }),
     }),
     {
-      name: "area-storage",
+      name: "amfood-area-storage",
       version: 1,
       partialize: (state) => ({
         selectedArea: state.selectedArea,

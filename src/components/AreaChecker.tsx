@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Loader2, MapPin, Navigation, X, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useCheckArea } from "@/hooks/useCheckArea";
-import { useDeliveryStore } from "@/features/delivery/store/deliveryStore";
+import { useDeliveryStore, DeliveryArea, DeliveryInfo } from "@/lib/deliveryStore";
 import { useNavigate } from "react-router-dom";
 
 interface AreaCheckerProps {
-  onConfirmed?: (data: any) => void;
+  onConfirmed?: (data: { area: DeliveryArea; delivery: DeliveryInfo }) => void;
   onNotInService?: () => void;
   onClose?: () => void;
   disableAutoNavigate?: boolean;
@@ -28,25 +28,21 @@ export default function AreaChecker({
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const navigate = useNavigate();
 
-  // Zustand store with correct setDeliveryInfo
-  const { setDeliveryInfo } = useDeliveryStore();
+  // Use store correctly
+  const setDeliveryArea = useDeliveryStore((state) => state.setDeliveryArea);
 
-  // Use React Query hook
   const { data, isLoading, error } = useCheckArea(
     manualLatLng?.lat,
     manualLatLng?.lng
   );
 
-  // Auto-detect location on mount
+  // Auto-detect location
   useEffect(() => {
     if ("geolocation" in navigator && !manualLatLng) {
       setDetecting(true);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setManualLatLng({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          });
+          setManualLatLng({ lat: pos.coords.latitude, lng: pos.coords.longitude });
           setDetecting(false);
         },
         () => {
@@ -58,31 +54,37 @@ export default function AreaChecker({
     }
   }, [manualLatLng]);
 
-  // Handle successful delivery check
+  // Handle delivery check
   useEffect(() => {
     if (!data || isLoading || error) return;
 
     if (data.inService && data.area) {
-      const payload = {
-        areaId: data.area._id,
-        areaName: data.area.name,
+      const area: DeliveryArea = {
+        _id: data.area._id,
+        name: data.area.name,
         city: data.area.city,
-        deliveryFee: data.delivery?.fee ?? 149,
-        minOrderAmount: data.delivery?.minOrder ?? 0,
-        estimatedTime: data.delivery?.estimatedTime ?? "35-50 min",
         center: data.area.center,
       };
 
-      setDeliveryInfo(payload); // Now works!
-      sessionStorage.setItem("selectedArea", JSON.stringify(payload));
+      const delivery: DeliveryInfo = {
+        deliveryFee: data.delivery?.fee ?? 149,
+        minOrderAmount: data.delivery?.minOrder ?? 0,
+        estimatedTime: data.delivery?.estimatedTime ?? "35-50 min",
+      };
 
-      toast.success(
-        data.hasDeliveryZone
-          ? `Delivering to ${data.area.name}! Fee: Rs.${payload.deliveryFee}`
-          : `We’re in ${data.area.name}! Delivery coming soon`
+      setDeliveryArea(area, delivery);
+      sessionStorage.setItem(
+        "selectedArea",
+        JSON.stringify({ area, delivery })
       );
 
-      onConfirmed?.(payload);
+      toast.success(
+        data.delivery
+          ? `Delivering to ${area.name}! Fee: Rs.${delivery.deliveryFee}`
+          : `We’re in ${area.name}! Delivery coming soon`
+      );
+
+      onConfirmed?.({ area, delivery });
 
       if (!disableAutoNavigate) {
         navigate("/menu", { replace: true });
@@ -91,7 +93,7 @@ export default function AreaChecker({
       toast.info(data.message || "We don’t deliver here yet");
       onNotInService?.();
     }
-  }, [data, isLoading, error, navigate, onConfirmed, onNotInService, disableAutoNavigate]);
+  }, [data, isLoading, error, navigate, onConfirmed, onNotInService, disableAutoNavigate, setDeliveryArea]);
 
   // Google Places Autocomplete
   useEffect(() => {

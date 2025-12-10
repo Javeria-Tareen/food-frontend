@@ -35,7 +35,7 @@ import CardPaymentPage from "@/features/orders/pages/CardPaymentPage";
 // Orders
 import OrdersPage from "@/features/orders/pages/OrdersPage";
 import OrderSuccessPage from "@/features/orders/pages/OrderSuccessPage";
-import OrderTrackingPage from "@/features/orders/pages/OrderTrackingPage"; // ← ADDED
+import OrderTrackingPage from "@/features/orders/pages/OrderTrackingPage";
 
 // Address
 import AddressListPage from "@/features/address/pages/AddressListPage";
@@ -113,7 +113,7 @@ export default function App() {
                 {/* Orders */}
                 <Route path="/orders" element={<OrdersPage />} />
                 <Route path="/order/success/:orderId" element={<OrderSuccessPage />} />
-                <Route path="/order/:orderId" element={<OrderTrackingPage />} /> {/* ← ADDED */}
+                <Route path="/order/:orderId" element={<OrderTrackingPage />} />
 
                 {/* Address */}
                 <Route path="/addresses" element={<AddressListPage />} />

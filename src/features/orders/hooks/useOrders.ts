@@ -110,6 +110,45 @@ export const useCancelOrder = () => {
   });
 };
 
+export const useRejectOrder = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ success: true; order: Order }, Error, string>({
+    mutationFn: async (orderId) => {
+      const { data } = await api.patch<{ success: true; order: Order }>(`/orders/${orderId}/reject`);
+      return data;
+    },
+    onSuccess: ({ order }) => {
+      queryClient.invalidateQueries({ queryKey: ['order', order._id] });
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+      toast.success('Order rejected successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to reject order');
+    },
+  });
+};
+
+// -----------------------
+// Download Receipt PDF
+// -----------------------
+export const downloadReceipt = async (orderId: string) => {
+  try {
+    const response = await api.get<Blob>(`/orders/${orderId}/receipt`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Order-${orderId}-Receipt.pdf`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success('Receipt downloaded');
+  } catch (error: any) {
+    toast.error(error.response?.data?.message || 'Failed to download receipt');
+  }
+};
 // Confirm bank transfer proof upload
 export const useConfirmBankPayment = () => {
   const queryClient = useQueryClient();
