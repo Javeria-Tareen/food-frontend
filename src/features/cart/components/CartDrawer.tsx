@@ -1,61 +1,82 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { ShoppingCart, Minus, Plus, Trash2, ShoppingBag } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/features/auth/store/authStore';
-import { useCartStore } from '../store/useCartStore';
-import { useServerCart, useRemoveFromCart, useUpdateCartQuantity } from '../hooks/useCart';
-import { Skeleton } from '@/components/ui/skeleton';
+// src/features/cart/components/CartDrawer.tsx
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
 
-export function CartDrawer() {
-  const navigate = useNavigate();
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useCartStore } from '@/features/cart/store/useCartStore';
+import {
+  useServerCart,
+  useUpdateCartQuantity,
+  useRemoveFromCart,
+  useClearCart,
+} from '@/features/cart/hooks/useServerCart';
+
+export const CartDrawer = () => {
   const [open, setOpen] = useState(false);
-  const { isAuthenticated } = useAuthStore();
-  
-  // Local cart for guests
-  const localCart = useCartStore();
-  
-  // Server cart for authenticated users
-  const { data: serverCartData, isLoading } = useServerCart();
-  
-  const removeFromCart = useRemoveFromCart();
-  const updateQuantity = useUpdateCartQuantity();
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
 
-  // Determine which cart to use
-  const cartItems = isAuthenticated 
-    ? serverCartData?.cart?.items || []
-    : localCart.items.map(item => ({
-        _id: item.id,
-        menuItem: { _id: item.id, name: item.name, price: item.price, image: item.image, isAvailable: true },
-        quantity: item.quantity,
-        priceAtAdd: item.price,
+  // Guest cart
+  const guestCart = useCartStore();
+  const guestItems = guestCart.items;
+  const guestTotal = guestCart.getTotal();
+  const guestCount = guestCart.getItemCount();
+
+  // Server cart
+  const { data: serverData, isLoading } = useServerCart();
+  const serverItems = serverData?.items ?? [];
+  const serverTotal = serverData?.total ?? 0;
+  const serverCount = serverItems.reduce((sum, i) => sum + i.quantity, 0);
+
+  const isGuest = !user;
+
+  const items = isGuest
+    ? guestItems.map(i => ({
+        id: i._id,
+        image: i.menuItem.image,
+        name: i.menuItem.name,
+        quantity: i.quantity,
+        priceAtAdd: i.priceAtAdd,
+        menuItemId: i.menuItem._id,
+      }))
+    : serverItems.map(i => ({
+        id: i._id,
+        image: i.menuItem.image,
+        name: i.menuItem.name,
+        quantity: i.quantity,
+        priceAtAdd: i.priceAtAdd,
+        menuItemId: i.menuItem._id,
       }));
 
-  const total = isAuthenticated 
-    ? serverCartData?.cart?.total || 0
-    : localCart.subtotal;
+  const total = isGuest ? guestTotal : serverTotal;
+  const itemCount = isGuest ? guestCount : serverCount;
 
-  const itemCount = isAuthenticated
-    ? cartItems.reduce((sum, item) => sum + item.quantity, 0)
-    : localCart.getItemCount();
+  const updateQty = useUpdateCartQuantity();
+  const removeItem = useRemoveFromCart();
+  const clearCart = useClearCart();
 
-  const handleQuantityChange = (itemId: string, menuItemId: string, currentQty: number, delta: number) => {
-    const newQty = currentQty + delta;
-    if (newQty <= 0) {
-      removeFromCart.mutate(itemId);
-    } else {
-      updateQuantity.mutate({ itemId, menuItemId, quantity: newQty });
+  const handleQty = (itemId: string, newQty: number) => {
+    if (isGuest) {
+      if (newQty <= 0) guestCart.removeItem(itemId);
+      else guestCart.updateQuantity(itemId, newQty);
+      return;
     }
+
+    if (newQty <= 0) removeItem.mutate(itemId);
+    else updateQty.mutate({ itemId, quantity: newQty });
   };
 
-  const handleCheckout = () => {
-    setOpen(false);
-    navigate('/checkout');
-  };
+  const handleRemove = (itemId: string) =>
+    isGuest ? guestCart.removeItem(itemId) : removeItem.mutate(itemId);
+
+  const handleClear = () =>
+    isGuest ? guestCart.clearCart() : clearCart.mutate();
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -63,152 +84,129 @@ export function CartDrawer() {
         <Button variant="ghost" size="icon" className="relative">
           <ShoppingCart className="h-5 w-5" />
           {itemCount > 0 && (
-            <Badge 
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-primary"
-            >
+            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
               {itemCount}
-            </Badge>
+            </span>
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-md flex flex-col">
+
+      <SheetContent className="flex flex-col w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <ShoppingBag className="h-5 w-5 text-primary" />
-            Your Cart
+          <SheetTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-6 w-6" />
+              Your Cart
+            </div>
             {itemCount > 0 && (
-              <Badge variant="secondary">{itemCount} items</Badge>
+              <Button variant="ghost" size="sm" onClick={handleClear}>
+                Clear
+              </Button>
             )}
           </SheetTitle>
         </SheetHeader>
 
-        {isLoading ? (
-          <div className="flex-1 space-y-4 py-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex gap-3">
-                <Skeleton className="h-16 w-16 rounded-lg" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : cartItems.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
-            <ShoppingCart className="h-16 w-16 text-muted-foreground/50 mb-4" />
-            <h3 className="font-semibold text-lg mb-2">Your cart is empty</h3>
-            <p className="text-muted-foreground text-sm mb-6">
-              Add some delicious items to get started
-            </p>
-            <Button onClick={() => { setOpen(false); navigate('/menu'); }}>
-              Browse Menu
-            </Button>
-          </div>
-        ) : (
-          <>
-            <ScrollArea className="flex-1 -mx-6 px-6">
-              <div className="space-y-4 py-4">
-                {cartItems.map((item) => (
-                  <div key={item._id} className="flex gap-3">
-                    {item.menuItem?.image ? (
-                      <img 
-                        src={item.menuItem.image} 
-                        alt={item.menuItem?.name}
-                        className="h-16 w-16 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center">
-                        <ShoppingBag className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm truncate">
-                        {item.menuItem?.name || 'Unknown Item'}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        Rs. {item.priceAtAdd}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => handleQuantityChange(
-                            item._id, 
-                            item.menuItem?._id, 
-                            item.quantity, 
-                            -1
-                          )}
-                          disabled={removeFromCart.isPending || updateQuantity.isPending}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="text-sm font-medium w-6 text-center">
-                          {item.quantity}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => handleQuantityChange(
-                            item._id, 
-                            item.menuItem?._id, 
-                            item.quantity, 
-                            1
-                          )}
-                          disabled={updateQuantity.isPending}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-sm">
-                        Rs. {item.priceAtAdd * item.quantity}
-                      </p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive mt-1"
-                        onClick={() => removeFromCart.mutate(item._id)}
-                        disabled={removeFromCart.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-
-            <div className="pt-4 space-y-4">
-              <Separator />
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>Rs. {total}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Delivery Fee</span>
-                  <span className="text-muted-foreground">Calculated at checkout</span>
-                </div>
-              </div>
-              <Separator />
-              <div className="flex justify-between font-semibold text-lg">
-                <span>Total</span>
-                <span>Rs. {total}</span>
-              </div>
-              <Button 
-                className="w-full h-12 text-base" 
-                onClick={handleCheckout}
-              >
-                Proceed to Checkout
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {isLoading && !isGuest ? (
+            <p className="text-center py-8">Loading cart...</p>
+          ) : items.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center">
+              <ShoppingCart className="h-16 w-16 text-muted-foreground/30 mb-4" />
+              <h3 className="text-lg font-medium">Your cart is empty</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                Browse the menu to add items.
+              </p>
+              <Button className="mt-6" onClick={() => { setOpen(false); navigate('/menu'); }}>
+                Browse Menu
               </Button>
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              <ScrollArea className="flex-1 -mx-6 px-6">
+                <div className="space-y-4 py-4">
+                  {items.map((item) => (
+                    <div key={item.id} className="flex gap-4">
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-20 h-20 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center">
+                          <ShoppingCart className="h-8 w-8 text-muted-foreground/40" />
+                        </div>
+                      )}
+
+                      <div className="flex-1">
+                        <h4 className="font-medium">{item.name}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Rs. {item.priceAtAdd.toFixed(2)}
+                        </p>
+
+                        <div className="flex items-center gap-2 mt-3">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => handleQty(item.id, item.quantity - 1)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+
+                          <span className="w-12 text-center font-medium">
+                            {item.quantity}
+                          </span>
+
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => handleQty(item.id, item.quantity + 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="ml-auto text-destructive"
+                            onClick={() => handleRemove(item.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="font-semibold">
+                          Rs. {(item.priceAtAdd * item.quantity).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+
+              <div className="border-t pt-6 space-y-4">
+                <div className="flex justify-between text-lg font-semibold">
+                  <span>Total</span>
+                  <span>Rs. {total.toFixed(2)}</span>
+                </div>
+
+                <Separator />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Button variant="outline" onClick={() => { setOpen(false); navigate('/cart'); }}>
+                    View Cart
+                  </Button>
+                  <Button onClick={() => { setOpen(false); navigate('/checkout'); }}>
+                    Checkout
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </SheetContent>
     </Sheet>
   );
-}
+};

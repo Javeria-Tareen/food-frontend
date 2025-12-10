@@ -18,6 +18,7 @@ export interface MenuItem {
   featured?: boolean;
 }
 
+
 export interface AreaInfo {
   _id: string;
   name: string;

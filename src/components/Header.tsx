@@ -1,171 +1,320 @@
-// src/components/Header.tsx — FINAL VERSION
+// src/components/Header.tsx
+import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShoppingCart, User, Menu, LogOut, MapPin } from "lucide-react";
+import {
+  ShoppingCart,
+  User,
+  Menu,
+  LogOut,
+  MapPin,
+  Package,
+  Plus,
+  Minus,
+  Trash2,
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { useStore } from "@/lib/store";
-import { useState } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import ServiceAreaModal from "@/components/ServiceAreaModal";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { useCartStore } from "@/features/cart/store/useCartStore";
+
+import {
+  useServerCart,
+  useRemoveFromCart,
+  useUpdateCartQuantity,
+} from "@/features/cart/hooks/useServerCart";
+
 
 export const Header = () => {
   const navigate = useNavigate();
-  const { cart, currentUser, setCurrentUser, selectedArea, setSelectedArea } = useStore();
+  const { user, logout } = useAuthStore();
+
+  const guestCart = useCartStore();
+  const { data: serverCart, isLoading: serverLoading } = useServerCart();
+
+  const removeItem = useRemoveFromCart();
+  const updateQty = useUpdateCartQuantity();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [areaModalOpen, setAreaModalOpen] = useState(false);
 
-  const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  // -------------------------------
+  // CART SOURCE SELECTION (SERVER / GUEST)
+  // -------------------------------
 
+  const items = user ? serverCart?.items ?? [] : guestCart.items;
+  const total = user ? serverCart?.total ?? 0 : guestCart.getTotal();
+
+  const cartCount = useMemo(
+    () => items.reduce((sum, i) => sum + i.quantity, 0),
+    [items]
+  );
+
+  // -------------------------------
+  // LOGOUT
+  // -------------------------------
   const handleLogout = () => {
-    setCurrentUser(null);
-    setSelectedArea(null);
-    sessionStorage.removeItem('areaChecked'); // Force re-check on login
+    logout();
     navigate("/");
   };
 
-  // Open area selector (clears current + forces checker)
-  const openAreaSelector = () => {
-    setSelectedArea(null);
-    sessionStorage.removeItem('areaChecked');
-    setMobileMenuOpen(false);
+  // -------------------------------
+  // QUANTITY HANDLING
+  // -------------------------------
+  const handleQuantityChange = (cartItemId: string, delta: number) => {
+    const item = items.find((i) => i._id === cartItemId);
+    if (!item) return;
+
+    const newQty = item.quantity + delta;
+
+    if (newQty <= 0) {
+      user ? removeItem.mutate(cartItemId) : guestCart.removeItem(cartItemId);
+      return;
+    }
+
+    user
+      ? updateQty.mutate({ itemId: cartItemId, quantity: newQty })
+      : guestCart.updateQuantity(cartItemId, newQty);
   };
 
-  const areaDisplay = selectedArea
-    ? `${selectedArea.name}, ${selectedArea.city}`
-    : "Select delivery area";
+  // -------------------------------
+  // CLEAR CART
+  // -------------------------------
+  const clearCart = () => {
+    user ? removeItem.mutate("all") : guestCart.clearCart();
+  };
 
+  // -------------------------------
+  // RENDER
+  // -------------------------------
   return (
-    <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b shadow-sm">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-600 to-emerald-600 flex items-center justify-center text-white font-bold text-xl">
-              AM
-            </div>
-            <div>
-              <h1 className="font-bold text-lg leading-tight">AM Foods</h1>
-              <p className="text-xs text-muted-foreground">Pakistani Cuisine</p>
-            </div>
-          </Link>
+    <>
+      {/* HEADER */}
+      <header className="sticky top-0 z-50 w-full bg-background/95 backdrop-blur border-b">
+        <div className="container mx-auto px-4">
+          <div className="flex h-16 items-center justify-between">
+            
+            {/* Logo */}
+            <Link to="/" className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold shadow-lg">
+                AM
+              </div>
 
-          {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-8">
-            <Link to="/" className="text-sm font-medium hover:text-primary transition">Home</Link>
-            <Link to="/menu" className="text-sm font-medium hover:text-primary transition">Menu</Link>
-            <Link to="/about" className="text-sm font-medium hover:text-primary transition">About</Link>
-            <Link to="/contact" className="text-sm font-medium hover:text-primary transition">Contact</Link>
-          </nav>
+              <div className="hidden sm:block">
+                <h1 className="text-lg font-bold">AM Foods</h1>
+                <p className="text-xs text-muted-foreground">
+                  Pakistani Cuisine
+                </p>
+              </div>
+            </Link>
 
-          {/* Right Section */}
-          <div className="flex items-center gap-4">
-            {/* Delivery Area */}
-            {selectedArea ? (
-              <button
-                onClick={openAreaSelector}
-                className="hidden md:flex items-center gap-3 bg-muted/50 hover:bg-muted px-4 py-2 rounded-full transition cursor-pointer"
-              >
-                <MapPin className="h-5 w-5 text-green-600" />
-                <div className="text-left">
-                  <p className="text-xs text-muted-foreground">Delivering to</p>
-                  <p className="font-semibold text-sm">{areaDisplay}</p>
-                </div>
-              </button>
-            ) : (
+            {/* Desktop Menu */}
+            <nav className="hidden lg:flex gap-8 items-center">
+              {[
+                { path: "/", label: "Home" },
+                { path: "/menu", label: "Menu" },
+                { path: "/about", label: "About" },
+                { path: "/contact", label: "Contact" },
+              ].map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className="text-sm font-medium hover:text-primary"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+
+            {/* Right Section */}
+            <div className="flex items-center gap-2">
+
+              {/* Area Selector */}
               <Button
                 variant="outline"
-                className="hidden md:flex items-center gap-2"
-                onClick={openAreaSelector}
+                className="hidden md:flex items-center gap-2 rounded-full px-4"
+                onClick={() => setAreaModalOpen(true)}
               >
-                <MapPin className="h-4 w-4" />
+                <MapPin className="h-4 w-4 text-green-600" />
                 Select Area
               </Button>
-            )}
 
-            {/* Cart */}
-            <Button variant="ghost" size="icon" className="relative" onClick={() => navigate("/cart")}>
-              <ShoppingCart className="h-5 w-5" />
-              {cartItemsCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                  {cartItemsCount}
-                </span>
-              )}
-            </Button>
-
-            {/* User */}
-            {currentUser ? (
-              <div className="hidden md:flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => navigate("/profile")}>
-                  <User className="h-4 w-4 mr-2" />
-                  {currentUser.name}
-                </Button>
-                <Button variant="ghost" size="icon" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <Button onClick={() => navigate("/login")} className="hidden md:flex">
-                Login
-              </Button>
-            )}
-
-            {/* Mobile Menu */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t">
-            <div className="space-y-4">
-              {/* Mobile Area */}
-              {selectedArea ? (
-                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <MapPin className="h-5 w-5 text-green-600" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Delivering to</p>
-                      <p className="font-medium">{areaDisplay}</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={openAreaSelector}>
-                    Change
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="outline" className="w-full justify-start" onClick={openAreaSelector}>
-                  <MapPin className="h-4 w-4 mr-2" />
-                  Select Delivery Area
-                </Button>
-              )}
-
-              {/* Mobile Links */}
-              <div className="space-y-2">
-                <Link to="/" className="block py-2 text-sm font-medium hover:text-primary" onClick={() => setMobileMenuOpen(false)}>Home</Link>
-                <Link to="/menu" className="block py-2 text-sm font-medium hover:text-primary" onClick={() => setMobileMenuOpen(false)}>Menu</Link>
-                <Link to="/about" className="block py-2 text-sm font-medium hover:text-primary" onClick={() => setMobileMenuOpen(false)}>About</Link>
-                <Link to="/contact" className="block py-2 text-sm font-medium hover:text-primary" onClick={() => setMobileMenuOpen(false)}>Contact</Link>
-              </div>
-
-              <div className="border-t pt-4">
-                {currentUser ? (
-                  <>
-                    <Link to="/profile" className="block py-2 text-sm font-medium hover:text-primary" onClick={() => setMobileMenuOpen(false)}>Profile</Link>
-                    <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left py-2 text-sm font-medium hover:text-primary">
-                      Logout
-                    </button>
-                  </>
-                ) : (
-                  <Link to="/login" className="block py-2 text-sm font-medium hover:text-primary" onClick={() => setMobileMenuOpen(false)}>Login</Link>
+              {/* Cart Button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative"
+                onClick={() => setCartOpen(true)}
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 bg-primary text-xs rounded-full flex items-center justify-center text-primary-foreground font-bold">
+                    {cartCount}
+                  </span>
                 )}
-              </div>
+              </Button>
+
+              {/* User / Login */}
+              {user ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate("/profile")}
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    {user.name.split(" ")[0]}
+                  </Button>
+
+                  <Button variant="ghost" size="icon" onClick={handleLogout}>
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                <Button className="hidden sm:flex" onClick={() => navigate("/login")}>
+                  Login
+                </Button>
+              )}
+
+              {/* Mobile Menu Trigger */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                onClick={() => setMobileMenuOpen(true)}
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
             </div>
           </div>
-        )}
-      </div>
-    </header>
+        </div>
+      </header>
+
+      {/* CART DRAWER */}
+      <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col">
+          <SheetHeader>
+            <div className="flex justify-between items-center">
+              <SheetTitle>Cart ({cartCount} items)</SheetTitle>
+
+              {cartCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearCart}
+                  className="text-destructive"
+                >
+                  Clear All
+                </Button>
+              )}
+            </div>
+          </SheetHeader>
+
+          {/* Cart Items */}
+          <ScrollArea className="flex-1 mt-4 px-1">
+            {serverLoading ? (
+              [...Array(3)].map((_, idx) => (
+                <Skeleton key={idx} className="h-24 w-full rounded-lg mb-3" />
+              ))
+            ) : items.length === 0 ? (
+              <div className="h-full flex flex-col justify-center items-center text-muted-foreground">
+                <Package className="h-16 w-16 mb-2" />
+                Your cart is empty
+              </div>
+            ) : (
+              items.map((item) => (
+                <div key={item._id} className="flex gap-3 p-3 border-b">
+
+                  <img
+                    src={item.menuItem.image || ""}
+                    className="w-20 h-20 rounded-lg object-cover bg-muted"
+                  />
+
+                  <div className="flex-1">
+                    <p className="font-semibold">{item.menuItem.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Rs. {item.priceAtAdd.toFixed(2)}
+                    </p>
+
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        onClick={() => handleQuantityChange(item._id, -1)}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+
+                      <span className="font-medium">{item.quantity}</span>
+
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        onClick={() => handleQuantityChange(item._id, +1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive ml-auto"
+                        onClick={() =>
+                          user
+                            ? removeItem.mutate(item._id)
+                            : guestCart.removeItem(item._id)
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="text-right font-semibold">
+                    Rs. {(item.priceAtAdd * item.quantity).toFixed(2)}
+                  </div>
+                </div>
+              ))
+            )}
+          </ScrollArea>
+
+          {/* Footer */}
+          <div className="py-4 border-t space-y-3">
+            <div className="flex justify-between font-semibold text-lg">
+              <span>Total</span>
+              <span>Rs. {total.toFixed(2)}</span>
+            </div>
+
+            {cartCount > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="outline" onClick={() => navigate("/cart")}>
+                  View Cart
+                </Button>
+
+                <Button onClick={() => navigate("/checkout")}>
+                  Checkout
+                </Button>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* AREA SELECTOR MODAL */}
+      <ServiceAreaModal
+        isOpen={areaModalOpen}
+        onClose={() => setAreaModalOpen(false)}
+      />
+    </>
   );
 };

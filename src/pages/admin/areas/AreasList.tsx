@@ -26,9 +26,11 @@ import {
   Trash2,
   AlertCircle,
   Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { Area } from '@/types/area';
+import { Area, AreasResponse, DeliveryZone } from '@/types/area';
 
 export default function AreasList() {
   const [areas, setAreas] = useState<Area[]>([]);
@@ -38,7 +40,7 @@ export default function AreasList() {
   const fetchAreas = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get<{ success: true; areas: Area[] }>('/admin/areas?limit=500');
+      const res = await apiClient.get<AreasResponse>('/admin/areas?limit=1000');
       setAreas(res.areas || []);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to load areas');
@@ -51,49 +53,64 @@ export default function AreasList() {
     fetchAreas();
   }, []);
 
-  // Toggle Area Visibility (inService)
   const toggleAreaActive = async (area: Area) => {
     setActionLoading(area._id);
     try {
       await apiClient.patch(`/admin/area/${area._id}/toggle-active`);
-      toast.success(area.isActive ? 'Area deactivated' : 'Area activated');
+      toast.success(area.isActive ? 'Area hidden from users' : 'Area now visible to users');
+
       setAreas(prev =>
         prev.map(a =>
           a._id === area._id ? { ...a, isActive: !a.isActive } : a
         )
       );
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to toggle area');
+      toast.error(err?.response?.data?.message || 'Failed to update visibility');
     } finally {
       setActionLoading(null);
     }
   };
 
-  // Toggle Delivery ON/OFF – FULLY TYPE-SAFE!
   const toggleDeliveryZone = async (area: Area) => {
     setActionLoading(area._id);
     try {
-      await apiClient.patch(`/admin/delivery-zone/${area._id}/toggle`);
-      const newStatus = !area.deliveryZone?.isActive;
+      const res = await apiClient.patch<{
+        success: true;
+        deliveryZone: {
+          areaId: string;
+          deliveryFee: number;
+          minOrderAmount: number;
+          estimatedTime: string;
+          isActive: boolean;
+        };
+      }>(`/admin/delivery-zone/${area._id}/toggle`);
 
-      toast.success(newStatus ? 'Delivery activated' : 'Delivery paused');
+      const newStatus = res.deliveryZone.isActive;
+
+      toast.success(
+        newStatus
+          ? `Delivery started in ${area.name}!`
+          : `Delivery paused in ${area.name}`
+      );
 
       setAreas(prev =>
         prev.map(a =>
           a._id === area._id
             ? {
                 ...a,
-                deliveryZone: a.deliveryZone
-                  ? { ...a.deliveryZone, isActive: newStatus }
-                  : {
-                      _id: 'new-zone-' + Date.now(),
-                      deliveryFee: 149,
-                      minOrderAmount: 0,
-                      estimatedTime: '35-50 min',
+                deliveryZone: newStatus
+                  ? {
+                      _id: res.deliveryZone.areaId || area._id + '-zone',
+                      deliveryFee: res.deliveryZone.deliveryFee,
+                      minOrderAmount: res.deliveryZone.minOrderAmount,
+                      estimatedTime: res.deliveryZone.estimatedTime,
                       isActive: true,
                       createdAt: new Date().toISOString(),
                       updatedAt: new Date().toISOString(),
-                    },
+                    } as DeliveryZone
+                  : a.deliveryZone
+                  ? { ...a.deliveryZone, isActive: false }
+                  : null,
               }
             : a
         )
@@ -109,7 +126,7 @@ export default function AreasList() {
     setActionLoading(areaId);
     try {
       await apiClient.delete(`/admin/area/${areaId}`);
-      toast.success('Area deleted permanently');
+      toast.success('Area and delivery zone deleted permanently');
       setAreas(prev => prev.filter(a => a._id !== areaId));
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to delete area');
@@ -122,135 +139,168 @@ export default function AreasList() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
         <div className="text-center">
-          <Loader2 className="h-16 w-16 animate-spin text-green-600 mx-auto" />
-          <p className="mt-6 text-xl font-semibold text-green-700">Loading delivery areas...</p>
+          <Loader2 className="h-16 w-16 animate-spin text-green-600 mx-auto mb-6" />
+          <p className="text-2xl font-bold text-green-700">Loading delivery areas...</p>
         </div>
       </div>
     );
   }
 
+  const liveCount = areas.filter(a => a.deliveryZone?.isActive).length;
+  const pausedCount = areas.filter(a => a.deliveryZone && !a.deliveryZone?.isActive).length;
+  const noZoneCount = areas.filter(a => !a.deliveryZone).length;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 py-12">
       <div className="container mx-auto px-6 max-w-7xl">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
           <div>
-            <h1 className="text-5xl font-black bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent flex items-center gap-center gap-4">
-              <MapPin className="h-12 w-12" /> Delivery Areas
+            <h1 className="text-5xl font-black bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent flex items-center gap-4">
+              <MapPin className="h-14 w-14" />
+              Delivery Areas
             </h1>
-            <p className="text-xl text-muted-foreground mt-3">
-              {areas.length} total • {areas.filter(a => a.deliveryZone?.isActive).length} live •{' '}
-              {areas.filter(a => a.deliveryZone && !a.deliveryZone.isActive).length} paused
-            </p>
+            <div className="flex flex-wrap gap-6 mt-4 text-lg">
+              <span className="font-medium">{areas.length} Total Areas</span>
+              <span className="text-green-600 font-bold flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5" /> {liveCount} Live
+              </span>
+              <span className="text-orange-600 font-bold flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" /> {pausedCount} Paused
+              </span>
+              <span className="text-gray-500 flex items-center gap-2">
+                <XCircle className="h-5 w-5" /> {noZoneCount} No Zone
+              </span>
+            </div>
           </div>
-          <Button asChild size="lg" className="bg-green-600 hover:bg-green-700">
+
+          <Button asChild size="lg" className="bg-green-600 hover:bg-green-700 shadow-lg text-lg px-8">
             <Link to="/admin/areas/add">
-              <Plus className="mr-2 h-6 w-6" /> Add New Area
+              <Plus className="mr-3 h-7 w-7" /> Add New Area
             </Link>
           </Button>
         </div>
 
         {/* Areas Grid */}
         <div className="grid gap-8">
-          {areas.map(area => {
-            const isLive = area.deliveryZone?.isActive === true;
+          {areas.map((area) => {
+            const hasZone = !!area.deliveryZone;
+            const isLive = hasZone && area.deliveryZone.isActive;
             const isLoading = actionLoading === area._id;
 
             return (
               <Card
                 key={area._id}
-                className={`overflow-hidden transition-all hover:shadow-2xl ${isLive ? 'ring-4 ring-green-500 ring-opacity-30' : ''}`}
+                className={`overflow-hidden transition-all duration-300 hover:shadow-2xl border-2 ${
+                  isLive
+                    ? 'border-green-500 bg-green-50/50'
+                    : hasZone
+                    ? 'border-orange-400 bg-orange-50/30'
+                    : 'border-gray-300'
+                }`}
               >
                 <CardContent className="p-8">
                   <div className="flex flex-col lg:flex-row justify-between gap-8">
-                    {/* Left */}
+                    {/* Left: Info */}
                     <div className="flex-1">
-                      <div className="flex items-center gap-5 mb-6">
-                        <div className="p-4 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl">
-                          <MapPin className="h-10 w-10 text-white" />
+                      <div className="flex items-start gap-6 mb-6">
+                        <div className={`p-5 rounded-2xl ${isLive ? 'bg-green-600' : 'bg-gray-400'}`}>
+                          <MapPin className="h-12 w-12 text-white" />
                         </div>
-                        <div>
-                          <h3 className="text-3xl font-bold">{area.name}</h3>
-                          <p className="text-lg text-muted-foreground">{area.city}</p>
+                        <div className="flex-1">
+                          <h3 className="text-3xl font-bold text-gray-900">{area.name}</h3>
+                          <p className="text-xl text-muted-foreground mt-1">{area.city}</p>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-3 mt-4">
-                        <Badge variant={area.isActive ? 'default' : 'secondary'}>
-                          Area {area.isActive ? 'Active' : 'Inactive'}
+                      <div className="flex flex-wrap gap-3">
+                        <Badge variant={area.isActive ? 'default' : 'secondary'} className="text-base px-4 py-2">
+                          {area.isActive ? 'Visible to Users' : 'Hidden'}
                         </Badge>
-                        {area.deliveryZone ? (
-                          <Badge variant={isLive ? 'default' : 'destructive'}>
-                            Delivery {isLive ? 'LIVE' : 'PAUSED'}
+
+                        {hasZone ? (
+                          <Badge
+                            variant={isLive ? 'default' : 'destructive'}
+                            className="text-base px-4 py-2"
+                          >
+                            {isLive ? 'Delivery LIVE' : 'Delivery PAUSED'}
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="border-orange-500 text-orange-600">
-                            <AlertCircle className="h-3 w-3 mr-1" /> No Delivery Zone
+                          <Badge variant="outline" className="border-orange-500 text-orange-700 text-base px-4 py-2">
+                            <AlertCircle className="h-4 w-4 mr-2" />
+                            No Delivery Zone
                           </Badge>
                         )}
                       </div>
+
+                      {hasZone && area.deliveryZone && (
+                        <div className="mt-4 text-sm text-gray-600">
+                          Fee: Rs.{area.deliveryZone.deliveryFee} • Min Order: Rs.{area.deliveryZone.minOrderAmount} • ETA: {area.deliveryZone.estimatedTime}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Right Controls */}
-                    <div className="flex flex-col gap-6 min-w-[320px]">
-                      {/* Area Visibility Switch */}
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-lg">Area Visibility</span>
-                        <Switch
-                          checked={area.isActive}
-                          onCheckedChange={() => toggleAreaActive(area)}
-                          disabled={isLoading}
-                        />
-                        {isLoading ? (
-                          <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
-                        ) : area.isActive ? (
-                          <span className="text-green-600 font-medium">ON</span>
-                        ) : (
-                          <span className="text-gray-400 font-medium">OFF</span>
-                        )}
+                    {/* Right: Controls */}
+                    <div className="flex flex-col gap-6 min-w-[340px]">
+                      {/* Area Visibility */}
+                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                        <span className="font-semibold text-lg">Area Visibility</span>
+                        <div className="flex items-center gap-3">
+                          {isLoading && <Loader2 className="h-5 w-5 animate-spin text-gray-500" />}
+                          <Switch
+                            checked={area.isActive}
+                            onCheckedChange={() => toggleAreaActive(area)}
+                            disabled={isLoading}
+                          />
+                          <span className={`font-bold ${area.isActive ? 'text-green-600' : 'text-gray-400'}`}>
+                            {area.isActive ? 'ON' : 'OFF'}
+                          </span>
+                        </div>
                       </div>
 
                       <Separator />
 
-                      {/* Delivery Toggle Button */}
+                      {/* Delivery Toggle */}
                       <Button
                         size="lg"
                         variant={isLive ? 'destructive' : 'default'}
                         onClick={() => toggleDeliveryZone(area)}
-                        disabled={isLoading}
-                        className="w-full text-lg font-medium"
+                        disabled={isLoading || !area.isActive}
+                        className="w-full text-lg font-bold h-14"
                       >
                         {isLoading ? (
                           <>
                             <Loader2 className="mr-3 h-6 w-6 animate-spin" />
-                            Updating...
+                            Updating Delivery...
                           </>
                         ) : (
                           <>
-                            <Truck className="mr-3 h-6 w-6" />
+                            <Truck className="mr-3 h-7 w-7" />
                             {isLive ? 'Pause Delivery' : 'Start Delivery'}
                           </>
                         )}
                       </Button>
 
-                      <div className="flex gap-3">
-                        <Button asChild variant="outline" size="lg" className="flex-1">
+                      {/* Actions */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Button asChild variant="outline" size="lg" className="font-medium">
                           <Link to={`/admin/areas/edit/${area._id}`}>
-                            <Edit className="mr-2 h-5 w-5" /> Edit Area
+                            <Edit className="mr-2 h-5 w-5" /> Edit
                           </Link>
                         </Button>
 
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="lg">
+                            <Button variant="destructive" size="lg" className="font-medium">
                               <Trash2 className="mr-2 h-5 w-5" /> Delete
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Delete {area.name}?</AlertDialogTitle>
+                              <AlertDialogTitle>Permanently delete {area.name}?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This action <strong>cannot be undone</strong>. The area and delivery zone will be permanently removed.
+                                This will delete the area, polygon, and delivery zone forever.
+                                <strong className="block mt-2 text-red-600">This action cannot be undone.</strong>
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -275,13 +325,13 @@ export default function AreasList() {
 
         {/* Empty State */}
         {areas.length === 0 && (
-          <Card className="p-20 text-center border-dashed border-2 border-gray-300">
-            <MapPin className="h-20 w-20 mx-auto text-muted-foreground opacity-30 mb-6" />
-            <h3 className="text-2xl font-bold text-muted-foreground">No delivery areas yet</h3>
-            <p className="text-muted-foreground mt-2">Start adding your first delivery zone</p>
-            <Button asChild size="lg" className="mt-6 bg-green-600 hover:bg-green-700">
+          <Card className="p-24 text-center border-dashed border-4 border-gray-300 bg-gray-50">
+            <MapPin className="h-24 w-24 mx-auto text-gray-400 mb-8 opacity-50" />
+            <h3 className="text-3xl font-bold text-gray-700 mb-4">No delivery areas yet</h3>
+            <p className="text-xl text-gray-500 mb-8">Draw your first service area on the map</p>
+            <Button asChild size="lg" className="text-lg px-10 h-14 bg-green-600 hover:bg-green-700">
               <Link to="/admin/areas/add">
-                <Plus className="mr-2 h-6 w-6" /> Add First Area
+                <Plus className="mr-3 h-8 w-8" /> Create First Area
               </Link>
             </Button>
           </Card>

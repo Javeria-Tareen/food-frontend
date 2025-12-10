@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { MapPin, X, Loader2, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api';
-import { useStore } from '@/lib/store';
+import { useAreaStore } from '@/lib/areaStore';
 
 interface CheckAreaResponse {
   success: boolean;
@@ -50,7 +50,7 @@ export default function AreaChecker({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const navigate = useNavigate();
-  const setSelectedArea = useStore((s) => s.setSelectedArea);
+  const setSelectedArea = useAreaStore((s) => s.setSelectedArea);
 
   // Load Google Places
   useEffect(() => {

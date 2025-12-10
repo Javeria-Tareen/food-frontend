@@ -1,14 +1,12 @@
-// src/types/google-maps.d.ts
-// src/types/google-maps.d.ts
-interface Window {
-  google?: {
-    maps?: {
-      places?: {
-        Autocomplete: any;
-      };
-    };
-  };
+// src/types/google.d.ts
+export {}; // Ensure this file is treated as a module
+
+// Extend the global Window interface
+declare global {
+  interface Window {
+    google?: typeof google;
+  }
 }
 
-declare const google: any;
-
+// Optional: include types for Google Maps if not already installed
+/// <reference types="@types/google.maps" />

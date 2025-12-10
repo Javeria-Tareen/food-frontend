@@ -1,42 +1,53 @@
+// src/features/cart/store/useCartStore.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-interface CartItem {
-  id: string;
+// === Types ===
+export interface MenuItemInCart {
+  _id: string;
   name: string;
   price: number;
-  quantity: number;
   image?: string;
+  isAvailable?: boolean;     // ← Added (critical for menu cards)
+  isVeg?: boolean;
+  isSpicy?: boolean;
 }
 
-interface AppliedDeal {
+export interface CartItem {
+  _id: string;                    // UUID for guest cart
+  menuItem: MenuItemInCart;
+  quantity: number;
+  priceAtAdd: number;
+}
+
+export interface AppliedDeal {
   code: string;
   title: string;
   description?: string;
   savings: number;
 }
 
-interface CartState {
+export interface CartState {
   items: CartItem[];
   appliedDeal: AppliedDeal | null;
   discountAmount: number;
-  
-  // Computed values
   subtotal: number;
   finalTotal: number;
-  
+
   // Actions
-  addItem: (item: CartItem) => void;
-  removeItem: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
+  addItem: (menuItem: MenuItemInCart, quantity?: number) => void;
+  removeItem: (cartItemId: string) => void;
+  updateQuantity: (cartItemId: string, newQuantity: number) => void;
   clearCart: () => void;
-  
   applyDeal: (deal: AppliedDeal) => void;
   removeDeal: () => void;
-  
-  // Helpers
   getItemCount: () => number;
+  getTotal: () => number;         // ← Now properly exposed!
 }
+
+// Helper
+const calculateSubtotal = (items: CartItem[]) =>
+  items.reduce((sum, item) => sum + item.priceAtAdd * item.quantity, 0);
 
 export const useCartStore = create<CartState>()(
   persist(
@@ -47,90 +58,98 @@ export const useCartStore = create<CartState>()(
       subtotal: 0,
       finalTotal: 0,
 
-      addItem: (item) => {
+      addItem: (menuItem, quantity = 1) => {
+        if (!menuItem.isAvailable) return; // prevent adding unavailable items
+
         set((state) => {
-          const existingItem = state.items.find((i) => i.id === item.id);
-          
-          let newItems;
-          if (existingItem) {
-            newItems = state.items.map((i) =>
-              i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i
+          const existing = state.items.find(i => i.menuItem._id === menuItem._id);
+
+          let newItems: CartItem[];
+          if (existing) {
+            newItems = state.items.map(i =>
+              i.menuItem._id === menuItem._id
+                ? { ...i, quantity: Math.min(i.quantity + quantity, 50) }
+                : i
             );
           } else {
-            newItems = [...state.items, item];
+            newItems = [
+              ...state.items,
+              {
+                _id: crypto.randomUUID(),
+                menuItem,
+                quantity,
+                priceAtAdd: menuItem.price,
+              },
+            ];
           }
-          
-          const subtotal = newItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-          const finalTotal = subtotal - state.discountAmount;
-          
+
+          const subtotal = calculateSubtotal(newItems);
+          const finalTotal = Math.max(0, subtotal - state.discountAmount);
+
           return { items: newItems, subtotal, finalTotal };
         });
       },
 
-      removeItem: (id) => {
+      removeItem: (cartItemId) => {
         set((state) => {
-          const newItems = state.items.filter((i) => i.id !== id);
-          const subtotal = newItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-          const finalTotal = subtotal - state.discountAmount;
-          
+          const newItems = state.items.filter(i => i._id !== cartItemId);
+          const subtotal = calculateSubtotal(newItems);
+          const finalTotal = Math.max(0, subtotal - state.discountAmount);
           return { items: newItems, subtotal, finalTotal };
         });
       },
 
-      updateQuantity: (id, quantity) => {
+      updateQuantity: (cartItemId, newQuantity) => {
         set((state) => {
-          if (quantity <= 0) {
-            return get().removeItem(id) as any;
-          }
-          
-          const newItems = state.items.map((i) =>
-            i.id === id ? { ...i, quantity } : i
-          );
-          const subtotal = newItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-          const finalTotal = subtotal - state.discountAmount;
-          
+          const newItems =
+            newQuantity <= 0
+              ? state.items.filter(i => i._id !== cartItemId)
+              : state.items.map(i =>
+                  i._id === cartItemId ? { ...i, quantity: Math.min(newQuantity, 50) } : i
+                );
+
+          const subtotal = calculateSubtotal(newItems);
+          const finalTotal = Math.max(0, subtotal - state.discountAmount);
           return { items: newItems, subtotal, finalTotal };
         });
       },
 
-      clearCart: () => {
+      clearCart: () =>
         set({
           items: [],
           appliedDeal: null,
           discountAmount: 0,
           subtotal: 0,
           finalTotal: 0,
-        });
-      },
+        }),
 
       applyDeal: (deal) => {
-        set((state) => {
-          const finalTotal = state.subtotal - deal.savings;
-          return {
-            appliedDeal: deal,
-            discountAmount: deal.savings,
-            finalTotal,
-          };
-        });
+        set((state) => ({
+          appliedDeal: deal,
+          discountAmount: deal.savings,
+          finalTotal: Math.max(0, state.subtotal - deal.savings),
+        }));
       },
 
       removeDeal: () => {
-        set((state) => {
-          const finalTotal = state.subtotal;
-          return {
-            appliedDeal: null,
-            discountAmount: 0,
-            finalTotal,
-          };
-        });
+        set((state) => ({
+          appliedDeal: null,
+          discountAmount: 0,
+          finalTotal: state.subtotal,
+        }));
       },
 
-      getItemCount: () => {
-        return get().items.reduce((sum, item) => sum + item.quantity, 0);
+      getItemCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
+
+      // ← NEW: Now you can use guestCart.getTotal() safely
+      getTotal: () => {
+        const state = get();
+        return state.finalTotal; // respects discount
+        // Or use: calculateSubtotal(state.items) for raw subtotal
       },
     }),
     {
-      name: 'cart-storage',
+      name: 'amfood-cart-v2', // changed name to force refresh old data
       partialize: (state) => ({
         items: state.items,
         appliedDeal: state.appliedDeal,
